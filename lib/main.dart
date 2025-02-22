@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'components/side_bar.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,8 +14,8 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: '管理系統',
       theme: ThemeData(
-        colorSchemeSeed: Colors.blue, // Material 3 配色
-        useMaterial3: true, // 啟用 Material 3
+        colorSchemeSeed: Colors.blue,
+        useMaterial3: true,
       ),
       home: const HomePage(),
     );
@@ -29,16 +30,24 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0; // 當前選擇的索引
-  bool _isExpanded = true; // 是否展開
+  int _selectedIndex = 0;
+  bool _isExpanded = true;
+  String _currentPath = "";
+  Map<String, int>? _lastSelectedSubItem;
+
+  void _updatePath(String parentTitle, String? childTitle) {
+    setState(() {
+      _currentPath = childTitle != null ? "$parentTitle > $childTitle" : "";
+    });
+  }
+
   Map<String, bool> _menuExpanded = {
-    "系統管理": true,
-    "工單管理": true,
-    "虛擬機操作": true,
-    "財務管理": true,
+    "系統管理": false,
+    "工單管理": false,
+    "虛擬機作業": false,
+    "財務管理": false,
   };
 
-  // 📌 定義選單結構
   final List<Map<String, dynamic>> _menuItems = [
     {
       "title": "系統管理",
@@ -62,7 +71,7 @@ class _HomePageState extends State<HomePage> {
       ]
     },
     {
-      "title": "虛擬機操作",
+      "title": "虛擬機作業",
       "icon": Icons.computer,
       "children": [
         {"title": " 虛擬機", "icon": Icons.computer_outlined},
@@ -81,8 +90,8 @@ class _HomePageState extends State<HomePage> {
     },
   ];
 
-  // 📌 定義對應的標題
   final List<String> _pageTitles = [
+    "系統管理",
     "本人帳號",
     "他人帳號",
     "企業組織管理",
@@ -91,10 +100,13 @@ class _HomePageState extends State<HomePage> {
     "資產管理",
     "公告管理",
     "系統日誌",
+    "工單管理",
     "建立工單",
+    "虛擬機作業",
     "虛擬機",
     "虛擬機操作",
     "虛擬機管理",
+    "財務管理",
     "月結帳單管理",
     "成本核算",
     "其他進項管理",
@@ -103,93 +115,107 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
-        children: [
-          // 📌 可收合的側邊選單
-          NavigationRailTheme(
-            data: NavigationRailThemeData(
-              selectedIconTheme: IconThemeData(color: Colors.blue, size: 30),
-              unselectedIconTheme: IconThemeData(color: Colors.grey, size: 24),
-              selectedLabelTextStyle: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-              unselectedLabelTextStyle: TextStyle(color: Colors.grey),
-            ),
-            child: NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              extended: _isExpanded, // 控制展開/縮小
-              leading: IconButton(
-                icon: Icon(_isExpanded ? Icons.menu_open : Icons.menu),
-                onPressed: () {
+      body: SingleChildScrollView(
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SideBar(
+                selectedIndex: _selectedIndex,
+                isExpanded: _isExpanded,
+                menuExpanded: _menuExpanded,
+                menuItems: _menuItems,
+                onDestinationSelected: (index) {
                   setState(() {
+                    _selectedIndex = index;
+
+                    int count = 0;
+                    bool found = false;
+
+                    for (var category in _menuItems) {
+                      if (count == index) {
+                        // 點擊第一層項目，清除路徑和第二層記錄
+                        _currentPath = "";
+                        _lastSelectedSubItem = null;
+                        found = true;
+                        break;
+                      }
+                      count++;
+
+                      if (category["children"] != null && _menuExpanded[category["title"]]!) {
+                        for (var subItem in category["children"]) {
+                          if (count == index) {
+                            // 點擊第二層項目，更新路徑和記錄
+                            _currentPath = "${category["title"]} > ${subItem["title"]}";
+                            _lastSelectedSubItem = {
+                              "parent": _menuItems.indexOf(category),
+                              "child": category["children"].indexOf(subItem),
+                            };
+                            found = true;
+                            break;
+                          }
+                          count++;
+                        }
+                      }
+                      if (found) break;
+                    }
+                  });
+                },
+                onToggleExpanded: () {
+                  setState(() {
+                    if (_isExpanded) {
+                      // 縮合時
+                      if (_lastSelectedSubItem != null) {
+                        _selectedIndex = _lastSelectedSubItem!["parent"]!;
+                        _currentPath = "";
+                      }
+                      _menuExpanded.updateAll((key, value) => false);
+                    } else {
+                      // 展開時
+                      if (_lastSelectedSubItem != null) {
+                        String parentTitle = _menuItems[_lastSelectedSubItem!["parent"]!]["title"];
+                        _menuExpanded[parentTitle] = true;
+                        int parentIndex = _lastSelectedSubItem!["parent"]!;
+                        int childOffset = _lastSelectedSubItem!["child"]!;
+                        _selectedIndex = parentIndex + 1 + childOffset;
+                        _currentPath = "$parentTitle > ${_menuItems[parentIndex]["children"][childOffset]["title"]}";
+                      }
+                    }
                     _isExpanded = !_isExpanded;
                   });
                 },
+                onToggleMenuExpanded: (title) {
+                  setState(() {
+                    _menuExpanded[title] = !_menuExpanded[title]!;
+                  });
+                },
               ),
-              destinations: _buildNavigationDestinations(),
-            ),
-          ),
-          // 📌 主要內容區（標題靠左上角）
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0), // 設置內邊距
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, // 讓標題靠左對齊
-                children: [
-                  Text(
-                    _pageTitles[_selectedIndex], // 根據當前索引顯示標題
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_currentPath.isNotEmpty)
+                        Text(
+                          _currentPath,
+                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                        ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _pageTitles[_selectedIndex],
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('內容區域', style: TextStyle(fontSize: 24)),
+                    ],
                   ),
-                  const SizedBox(height: 16), // 間距
-                  Expanded(
-                    child: Center(child: Text('內容區域', style: TextStyle(fontSize: 24))),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 📌 動態建立選單
-  List<NavigationRailDestination> _buildNavigationDestinations() {
-    List<NavigationRailDestination> destinations = [];
-
-    for (var category in _menuItems) {
-      // 第一層選單（大分類）
-      destinations.add(
-        NavigationRailDestination(
-          icon: Icon(category["icon"]),
-          selectedIcon: Icon(category["icon"], color: Colors.blue),
-          label: InkWell(
-            onTap: () {
-              setState(() {
-                _menuExpanded[category["title"]] = !_menuExpanded[category["title"]]!;
-              });
-            },
-            child: Text(category["title"]),
+            ],
           ),
         ),
-      );
-
-      // 如果展開，則顯示第二層選單
-      if (_menuExpanded[category["title"]] == true) {
-        for (var subItem in category["children"]) {
-          destinations.add(
-            NavigationRailDestination(
-              icon: Icon(subItem["icon"]),
-              selectedIcon: Icon(subItem["icon"], color: Colors.blue),
-              label: Text(subItem["title"]),
-            ),
-          );
-        }
-      }
-    }
-    return destinations;
+      ),
+    );
   }
 }
